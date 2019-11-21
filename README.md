@@ -1,4 +1,4 @@
-
+﻿
 # HCGNets: Gated Convolutional Networks with Hybrid Connectivity for Image Classification
 
 This project provides source code for our AAAI2020 paper HCGNet, the final paper will come soon.
@@ -25,9 +25,8 @@ NVIDIA [NCCL](https://docs.nvidia.com/deeplearning/sdk/nccl-install-guide/index.
 
 ### Clone the repo
 ```
-$ git clone https://github.com/iVMCL/AOGNets.git
-$ cd AOGNets
-$ pip install requirements.txt
+$ git clone https://github.com/winycg/HCGNet.git
+$ cd HCGNet
 ```
 
 ### Some tweaks
