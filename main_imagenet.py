@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 
-from data_preprocessing.autoaugment import ImageNetPolicy
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import os
@@ -117,7 +116,6 @@ train_dataset = datasets.ImageFolder(
     transforms.Compose([
         transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
-        ImageNetPolicy(),
         # transforms.ToTensor(), Too slow
         # normalize,
     ]))

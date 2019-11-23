@@ -80,7 +80,7 @@ Need NCCL library:
 ### Evaluation
 When the training finishes, the best model file  `HCGNet_B_best.pth.tar` is saved in `./checkpoint/`.
 ```
-python -m torch.distributed.launch --nproc_per_node=2 main_imagenet.py --arch HCGNet_B --gpu-id 0,1 --checkpoint ./checkpoint/HCGNet_B_best.pth.tar --evaluate 
+python -m torch.distributed.launch --nproc_per_node=2 main_imagenet.py --arch HCGNet_B --gpu-id 0,1 --resume --checkpoint ./checkpoint/HCGNet_B_best.pth.tar --evaluate 
 ```
 
 ### Results
