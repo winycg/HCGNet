@@ -25,8 +25,8 @@ import math
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--num-classes', default=1000, type=int, help='classes number')
 parser.add_argument('--arch', default='HCGNet_B', type=str, help='network architecture')
-parser.add_argument('--train_data', default='/data/ImageNet/train/', type=str, help='train data location')
-parser.add_argument('--val_data', default='/data/ImageNet/val/', type=str, help='validation data location')
+parser.add_argument('--train_data', default='./data/ImageNet/train/', type=str, help='train data location')
+parser.add_argument('--val_data', default='./data/ImageNet/val/', type=str, help='validation data location')
 parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N', help='mini-batch size per process')
 parser.add_argument('--init-lr', default=0.1, type=float, help='learning rate')
