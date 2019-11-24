@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -42,6 +43,8 @@ parser.add_argument('--checkpoint', type=str,  default='./checkpoint/HCGNet_B_be
 parser.add_argument('--evaluate', '-e', action='store_true', help='evaluate')
 parser.add_argument("--local_rank", default=0, type=int)
 parser.add_argument('--sync_bn', action='store_true', help='enabling apex sync BN.')
+parser.add_argument('--print_freq', type=int, default=100)
+
 
 # global hyperparameter set
 args = parser.parse_args()
@@ -243,30 +246,35 @@ def adjust_lr(optimizer, epoch, eta_max=args.init_lr, eta_min=0.):
     return cur_lr
 
 
-def acc_num(output, target, topk=(1,)):
+def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
+    batch_size = target.size(0)
 
     _, pred = output.topk(maxk, 1, True, True)
     pred = pred.t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
 
-
-    number = []
+    res = []
     for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0).item()
-        number.append(correct_k)
-    return number
+        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
 
 def train(epoch):
+    train_sampler.set_epoch(epoch)
+    batch_times = AverageMeter()
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
+
     net.train()
-    train_loss = 0
-    top1_correct = 0
-    top5_correct = 0
-    total = 0
-    lr = adjust_lr(optimizer, epoch, args.init_lr * float(args.batch_size * args.world_size) / 256)
+    end = time.time()
     start_time = time.time()
-    batch_time = time.time()
+    start_batch_time = time.time()
+
+    lr = adjust_lr(optimizer, epoch, args.init_lr * float(args.batch_size * args.world_size) / 256)
 
     prefetcher = data_prefetcher(trainloader)
     inputs, targets = prefetcher.next()
@@ -283,35 +291,63 @@ def train(epoch):
         loss.backward()
         optimizer.step()
 
-        train_loss += loss.item()
-        num = acc_num(outputs, targets, (1, 5))
-        top1_correct += num[0]
-        top5_correct += num[1]
-        total += targets.size(0)
         if args.local_rank == 0:
-            print('Epoch:{0}\tBatch:{1}\t lr:{2:.6f}\t duration:{3:.3f}\ttop1_acc:{4:.2f}\ttop5_acc:{5:.2f}'
-                  .format(epoch, i, lr, time.time() - batch_time, num[0]/targets.size(0), num[1]/targets.size(0)))
-        batch_time = time.time()
+            print('Epoch: {0}\tBatch: {1}\t Time {2:.3f}'.
+                  format(epoch, i, time.time() - start_batch_time))
+
+        if i % args.print_freq == 0:
+            # Every print_freq iterations, check the loss, accuracy, and speed.
+            # For best performance, it doesn't make sense to print these metrics every
+            # iteration, since they incur an allreduce and some host<->device syncs.
+
+            # Measure accuracy
+            prec1, prec5 = accuracy(outputs, targets, topk=(1, 5))
+
+            # Average loss and accuracy across processes for logging
+            reduced_loss = reduce_tensor(loss.data)
+            prec1 = reduce_tensor(prec1)
+            prec5 = reduce_tensor(prec5)
+
+            # to_python_float incurs a host<->device sync
+            losses.update(float(reduced_loss.item()), inputs.size(0))
+            top1.update(float(prec1.item()), inputs.size(0))
+            top5.update(float(prec5.item()), inputs.size(0))
+
+            batch_times.update((time.time() - end) / args.print_freq)
+            end = time.time()
+
+            if args.local_rank == 0:
+                print('Epoch: [{0}][{1}/{2}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Speed {3:.3f} ({4:.3f})\t'
+                      'Loss {loss.val:.10f} ({loss.avg:.4f})\t'
+                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    epoch, i, len(trainloader),
+                    args.world_size * args.batch_size / batch_times.val,
+                    args.world_size * args.batch_size / batch_times.avg,
+                    batch_time=batch_times,
+                    loss=losses, top1=top1, top5=top5))
 
         inputs, targets = prefetcher.next()
+        start_batch_time = time.time()
 
-    top1_acc = top1_correct / total
-    top5_acc = top5_correct / total
     torch.cuda.empty_cache()
     if args.local_rank == 0:
-        print('Epoch:{0}\t lr:{1:.6f}\t duration:{2:.3f}\ttop1_acc:{3:.2f}\ttop5_acc:{4:.2f}\ttrain_loss:{5:.6f}'
-              .format(epoch, lr, time.time() - start_time, top1_acc, top5_acc,
-                      train_loss / total))
+        print('Epoch:{0}\t lr:{1:.6f}\t duration:{2:.3f}'
+              .format(epoch, lr, time.time() - start_time))
         with open('result/' + os.path.basename(__file__).split('.')[0] + '.txt', 'a+') as f:
-            f.write(str(time.time()-start_time)+' '+str(top1_acc) + ' ' + str(top5_acc) + ' ' + str(train_loss / total))
+            f.write(str(time.time()-start_time))
 
 def test(epoch):
+    batch_time = AverageMeter()
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
+
     net.eval()
+    end = time.time()
     global best_acc
-    test_loss = 0
-    top1_correct = 0
-    top5_correct = 0
-    total = 0
 
     prefetcher = data_prefetcher(testloader)
     inputs, targets = prefetcher.next()
@@ -324,29 +360,45 @@ def test(epoch):
             outputs = net(inputs)
             loss = criterion(outputs, targets)
 
-            test_loss += loss.item()
-            num = acc_num(outputs, targets, (1, 5))
-            top1_correct += num[0]
-            top5_correct += num[1]
-            total += targets.size(0)
+            prec1, prec5 = accuracy(outputs, targets, topk=(1, 5))
+
+            reduced_loss = reduce_tensor(loss)
+            prec1 = reduce_tensor(prec1)
+            prec5 = reduce_tensor(prec5)
+
+            losses.update(float(reduced_loss.item()), inputs.size(0))
+            top1.update(float(prec1.item()), inputs.size(0))
+            top5.update(float(prec5.item()), inputs.size(0))
+
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            if args.local_rank == 0:
+                print('Test: [{0}/{1}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Speed {2:.3f} ({3:.3f})\t'
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+                    i, len(testloader),
+                    args.world_size * args.batch_size / batch_time.val,
+                    args.world_size * args.batch_size / batch_time.avg,
+                    batch_time=batch_time, loss=losses,
+                    top1=top1, top5=top5))
 
             inputs, targets = prefetcher.next()
-
-        top1_acc = top1_correct / total
-        top5_acc = top5_correct / total
-        if args.local_rank == 0:
-            with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
-                f.write(','+str(top1_acc)+' '+str(top5_acc)+' '+str(test_loss/total)+'\n')
     torch.cuda.empty_cache()
 
     if args.local_rank == 0:
-        print('Test top1 accuracy: ', top1_acc)
-        print('Test top5 accuracy: ', top5_acc)
-        print('Test loss: ', test_loss/total)
+        with open('result/' + os.path.basename(__file__).split('.')[0] + '.txt', 'a+') as f:
+            f.write(',' + str(top1.avg) + ' ' + str(top5.avg) + '\n')
+        print('Test top1 accuracy: ', top1.avg)
+        print('Test top5 accuracy: ', top5.avg)
+        print('Test loss: ', losses.avg)
 
         is_best = False
-        if best_acc < top1_acc:
-            best_acc = top1_acc
+        if best_acc < top1.avg:
+            best_acc = top1.avg
             is_best = True
 
         state = {
@@ -364,6 +416,31 @@ def test(epoch):
 
         print('Save Successfully!')
         print('------------------------------------------------------------------------')
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def reduce_tensor(tensor):
+    rt = tensor.clone()
+    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
+    rt /= args.world_size
+    return rt
 
 
 if __name__ == '__main__':
