@@ -1,8 +1,8 @@
 ﻿
 # HCGNets: Gated Convolutional Networks with Hybrid Connectivity for Image Classification
 
-This project provides source code for our AAAI2020 paper HCGNet, the final paper will come soon.
-![alt text](images/teaser.png "AOG building block and ImageNet performance")
+This project provides source code for our AAAI2020 paper [HCGNet](https://arxiv.org/pdf/1908.09699.pdf).
+
 
 
 ## Installation
