@@ -36,7 +36,7 @@ parser.add_argument('--resume', '-r', action='store_true', help='resume from che
 # global hyperparameter set
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-args.resume = False
+
 if args.resume is False:
     with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
         f.seek(0)
