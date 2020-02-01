@@ -1,6 +1,3 @@
-'''Train CIFAR10 with PyTorch.'''
-from __future__ import print_function
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -42,9 +39,7 @@ parser.add_argument('--resume', '-r', action='store_true', help='resume from che
 parser.add_argument('--checkpoint', type=str,  default='./checkpoint/HCGNet_B_best.pth.tar', help='checkpoint file')
 parser.add_argument('--evaluate', '-e', action='store_true', help='evaluate')
 parser.add_argument("--local_rank", default=0, type=int)
-parser.add_argument('--sync_bn', action='store_true', help='enabling apex sync BN.')
 parser.add_argument('--print_freq', type=int, default=100)
-
 
 # global hyperparameter set
 args = parser.parse_args()
@@ -89,14 +84,24 @@ if is_distributed:
     args.world_size = torch.distributed.get_world_size()
 
 net = model(num_classes=args.num_classes)
-
-if args.sync_bn:
-    import apex
-    print("using apex synced BN")
-    net = apex.parallel.convert_syncbn_model(net)
-
 net = net.cuda()
 net = torch.nn.parallel.DistributedDataParallel(net, device_ids=[args.local_rank], output_device=args.local_rank)
+optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=4e-5, nesterov=True)
+
+if args.resume:
+    print('==> Resuming from checkpoint ..')
+    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+    if args.evaluate:
+        resume_path = args.checkpoint
+    else:
+        resume_path = './checkpoint/' + model.__name__ + '.pth.tar'
+    checkpoint = torch.load(resume_path)
+    net.load_state_dict(checkpoint['net'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    start_epoch = checkpoint['epoch']
+    best_acc = checkpoint['best_acc']
+    print('==> Resuming successfully')
+
 
 def fast_collate(batch):
     imgs = [img[0] for img in batch]
@@ -191,8 +196,6 @@ def CrossEntropyLoss_label_smooth(outputs, targets,
     loss = - torch.sum(log_prob * smoothed_labels) / N
     return loss
 
-optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9, weight_decay=4e-5, nesterov=True)
-
 
 def mixup_data(x, y, alpha=0.4, use_cuda=True):
     '''Returns mixed inputs, pairs of targets, and lambda'''
@@ -214,20 +217,6 @@ def mixup_data(x, y, alpha=0.4, use_cuda=True):
 
 def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a, args.num_classes) + (1 - lam) * criterion(pred, y_b, args.num_classes)
-
-
-if args.resume:
-    print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    if args.evaluate:
-        resume_path = args.checkpoint
-    else:
-        resume_path = './checkpoint/' + model.__name__ + '.pth.tar'
-    checkpoint = torch.load(resume_path)
-    net.load_state_dict(checkpoint['net'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    start_epoch = checkpoint['epoch']
-    best_acc = checkpoint['best_acc']
 
 
 def adjust_lr(optimizer, epoch, eta_max=args.init_lr, eta_min=0.):
@@ -292,8 +281,8 @@ def train(epoch):
         optimizer.step()
 
         if args.local_rank == 0:
-            print('Epoch: {0}\tBatch: {1}\t Time {2:.3f}'.
-                  format(epoch, i, time.time() - start_batch_time))
+            print('Epoch: {0}\tBatch: {1}\t Time {2:.3f} Lr {3:.6f}'.
+                  format(epoch, i, time.time() - start_batch_time, lr))
 
         if i % args.print_freq == 0:
             # Every print_freq iterations, check the loss, accuracy, and speed.
@@ -334,10 +323,8 @@ def train(epoch):
 
     torch.cuda.empty_cache()
     if args.local_rank == 0:
-        print('Epoch:{0}\t lr:{1:.6f}\t duration:{2:.3f}'
-              .format(epoch, lr, time.time() - start_time))
         with open('result/' + os.path.basename(__file__).split('.')[0] + '.txt', 'a+') as f:
-            f.write(str(time.time()-start_time))
+            f.write(str(time.time()-start_time)+str(lr))
 
 def test(epoch):
     batch_time = AverageMeter()
@@ -396,26 +383,27 @@ def test(epoch):
         print('Test top5 accuracy: ', top5.avg)
         print('Test loss: ', losses.avg)
 
-        is_best = False
-        if best_acc < top1.avg:
-            best_acc = top1.avg
-            is_best = True
+        if args.evaluate is False:
+            is_best = False
+            if best_acc < top1.avg:
+                best_acc = top1.avg
+                is_best = True
 
-        state = {
-            'net': net.state_dict(),
-            'epoch': epoch,
-            'optimizer': optimizer.state_dict(),
-            'best_acc': best_acc
-        }
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/'+model.__name__+'.pth.tar')
+            state = {
+                'net': net.state_dict(),
+                'epoch': epoch,
+                'optimizer': optimizer.state_dict(),
+                'best_acc': best_acc
+            }
+            if not os.path.isdir('checkpoint'):
+                os.mkdir('checkpoint')
+            torch.save(state, './checkpoint/'+model.__name__+'.pth.tar')
 
-        if is_best:
-            shutil.copyfile('./checkpoint/'+model.__name__+'.pth.tar', './checkpoint/'+model.__name__+'_best.pth.tar')
+            if is_best:
+                shutil.copyfile('./checkpoint/'+model.__name__+'.pth.tar',
+                                './checkpoint/'+model.__name__+'_best.pth.tar')
 
-        print('Save Successfully!')
-        print('------------------------------------------------------------------------')
+            print('Save Successfully!')
 
 
 class AverageMeter(object):
@@ -444,16 +432,9 @@ def reduce_tensor(tensor):
 
 
 if __name__ == '__main__':
-    global_time = time.time()
     if args.evaluate:
         test(start_epoch)
     else:
         for epoch in range(start_epoch, args.epochs):
             train(epoch)
             test(epoch)
-    print(time.time()-global_time)
-
-
-
-
-
