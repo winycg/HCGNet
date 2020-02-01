@@ -377,13 +377,13 @@ def test(epoch):
     torch.cuda.empty_cache()
 
     if args.local_rank == 0:
-        with open('result/' + os.path.basename(__file__).split('.')[0] + '.txt', 'a+') as f:
-            f.write(',' + str(top1.avg) + ' ' + str(top5.avg) + '\n')
         print('Test top1 accuracy: ', top1.avg)
         print('Test top5 accuracy: ', top5.avg)
         print('Test loss: ', losses.avg)
 
         if args.evaluate is False:
+            with open('result/' + os.path.basename(__file__).split('.')[0] + '.txt', 'a+') as f:
+                f.write(',' + str(top1.avg) + ' ' + str(top5.avg) + '\n')
             is_best = False
             if best_acc < top1.avg:
                 best_acc = top1.avg
