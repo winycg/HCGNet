@@ -87,7 +87,6 @@ python -m torch.distributed.launch --nproc_per_node=2 main_imagenet.py --arch HC
 | Model | Params | FLOPS | Top-1 | Top-5 | Pretrained model|
 | - | - | - | - | - |- |
 | HCGNet-B | 12.9M | 2.0G |21.5 | 5.9 |[HCGNet_B_best.pth.tar](https://drive.google.com/file/d/1foA9pa4KZopzMMihGudBCE6B1C_-p1W0/view?usp=sharing)|
-| HCGNet-C | 42.2M | 7.1G |19.5 | 4.8 |Coming soon|
 
 ## Interpretability by network dissection
 ### Reference
