@@ -31,7 +31,7 @@ parser.add_argument('--epochs', type=int, default=1270, help='number of epochs t
 parser.add_argument('--gpu-id', type=str, default='0, 1')
 parser.add_argument('--manual_seed', type=int, default=0)
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
-
+parser.add_argument('--evaluate', '-e', action='store_true', help='evaluate model')
 
 # global hyperparameter set
 args = parser.parse_args()
@@ -135,12 +135,14 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/'+model.__name__+'.pth.tar')
+    if args.evaluate:
+        checkpoint = torch.load('./checkpoint/' + model.__name__ + '_best.pth.tar')
+    else:
+        checkpoint = torch.load('./checkpoint/' + model.__name__ + '.pth.tar')
     net.load_state_dict(checkpoint['net'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
+    start_epoch = checkpoint['epoch'] + 1
 
 
 def adjust_lr(optimizer, epoch, eta_max=0.1, eta_min=0.):
@@ -189,8 +191,9 @@ def train(epoch):
         correct += predicted.eq(targets).sum().item()
     print('Epoch:{0}\t lr:{1:.3f}\t duration:{2:.3f}\ttrain_acc:{3:.2f}\ttrain_loss:{4:.6f}'
           .format(epoch, lr, time.time()-start_time, 100. * correct/total, train_loss/len(trainset)))
-    with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
-        f.write(str(correct/total)+' '+str(train_loss/len(trainset)))
+    with open('result/' + str(os.path.basename(__file__).split('.')[0]) + '.txt', 'a+') as f:
+        f.write('Epoch:{0}\t lr:{1:.3f}\t duration:{2:.3f}\ttrain_acc:{3:.2f}\ttrain_loss:{4:.6f}'
+          .format(epoch, lr, time.time()-start_time, 100. * correct/total, train_loss/len(trainset)))
 
 
 def test(epoch):
@@ -210,13 +213,13 @@ def test(epoch):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-        with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
-            f.write(','+str(correct / total)+' '+str(test_loss/len(testset))+'\n')
+        with open('result/' + str(os.path.basename(__file__).split('.')[0]) + '.txt', 'a+') as f:
+            f.write('\t test_acc:{0:.2f}\t test_loss:{1:.6f}'
+                    .format(train_loss / len(trainset), 100. * correct / total)+'\n')
 
     # Save checkpoint.
     acc = 100. * correct/total
     print('Test accuracy: ', acc)
-    print('Test loss: ', test_loss/len(testset))
     state = {
         'net': net.state_dict(),
         'acc': acc,
@@ -226,15 +229,27 @@ def test(epoch):
     if not os.path.isdir('checkpoint'):
         os.mkdir('checkpoint')
     torch.save(state, './checkpoint/'+model.__name__+'.pth.tar')
+
+    is_best = False
+    if best_acc < acc:
+        best_acc = acc
+        is_best = True
+
+    if is_best:
+        shutil.copyfile('./checkpoint/' + str(model.__name__) + '.pth.tar',
+                        './checkpoint/' + str(model.__name__) + '_best.pth.tar')
     print('Save Successfully')
     print('------------------------------------------------------------------------')
 
 
 if __name__ == '__main__':
-    global_time = time.time()
-    for epoch in range(start_epoch, args.epochs):
-        train(epoch)
-        test(epoch)
+    if args.evaluate:
+        test(start_epoch)
+    else:
+        for epoch in range(start_epoch, args.epochs):
+            train(epoch)
+            test(epoch)
+
 
 
 
