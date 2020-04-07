@@ -50,6 +50,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 drop_scheduler = SGDRScheduler  # or 'LinearScheduler'
+if drop_scheduler is LinearScheduler:
+    drop_scheduler.num_epochs =args.epochs
 # -----------------------------------------------------------------------------------------
 # dataset
 if args.dataset == 'cifar10':
@@ -170,8 +172,6 @@ def train(epoch):
 
     lr = adjust_lr(optimizer, epoch)
     drop_scheduler.global_epoch = epoch
-    if drop_scheduler is LinearScheduler:
-        drop_scheduler.num_epochs =epoch
     start_time = time.time()
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
@@ -235,7 +235,6 @@ if __name__ == '__main__':
     for epoch in range(start_epoch, args.epochs):
         train(epoch)
         test(epoch)
-    print(time.time()-global_time)
 
 
 
