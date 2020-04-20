@@ -38,7 +38,7 @@ args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 if args.resume is False:
-    with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
+    with open('result/' + str(os.path.basename(__file__).split('.')[0]) + args.arch + '.txt', 'a+') as f:
         f.seek(0)
         f.truncate()
 
@@ -191,7 +191,7 @@ def train(epoch):
         correct += predicted.eq(targets).sum().item()
     print('Epoch:{0}\t lr:{1:.3f}\t duration:{2:.3f}\ttrain_acc:{3:.2f}\ttrain_loss:{4:.6f}'
           .format(epoch, lr, time.time()-start_time, 100. * correct/total, train_loss/len(trainset)))
-    with open('result/' + str(os.path.basename(__file__).split('.')[0]) + '.txt', 'a+') as f:
+    with open('result/' + str(os.path.basename(__file__).split('.')[0]) + args.arch + '.txt', 'a+') as f:
         f.write('Epoch:{0}\t lr:{1:.3f}\t duration:{2:.3f}\ttrain_acc:{3:.2f}\ttrain_loss:{4:.6f}'
           .format(epoch, lr, time.time()-start_time, 100. * correct/total, train_loss/len(trainset)))
 
@@ -213,7 +213,7 @@ def test(epoch):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-        with open('result/' + str(os.path.basename(__file__).split('.')[0]) + '.txt', 'a+') as f:
+        with open('result/' + str(os.path.basename(__file__).split('.')[0]) + args.arch + '.txt', 'a+') as f:
             f.write('\t test_acc:{0:.2f}\t test_loss:{1:.6f}'
                     .format(train_loss / len(trainset), 100. * correct / total)+'\n')
 
