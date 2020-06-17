@@ -1,7 +1,7 @@
 ﻿
 # HCGNets: Gated Convolutional Networks with Hybrid Connectivity for Image Classification
 
-This project provides source code for our AAAI2020 paper [HCGNet](https://arxiv.org/pdf/1908.09699.pdf).
+This project provides source code for our AAAI-2020 paper [HCGNet](https://arxiv.org/pdf/1908.09699.pdf).
 
 
 
@@ -153,6 +153,19 @@ You can download our pretrained detection and segmentation model file from [HCGN
 | - | - | - | - | - |- | - |- |- |
 | ResNet-50-FPN| 44.2M | 275.6G |37.3  | 59.9|40.2 |34.2  |55.9 |36.2 |
 | HCGNet-B-FPN | 32.1M | 230.4G |38.3 |60.6 |41.3 |35.2 |57.5| 37.1|
+
+## Citation
+
+```
+@inproceedings{yang2020gated,
+  title={Gated Convolutional Networks with Hybrid Connectivity for Image Classification},
+  author={Yang, Chuanguang and An, Zhulin and Zhu, Hui and Hu, Xiaolong and Zhang, Kun and Xu, Kaiqiang and Li, Chao and Xu, Yongjun},
+  booktitle={Thirty-Fourth AAAI Conference on Artificial Intelligence},
+  pages = {12581--12588},
+  year={2020}
+}
+```
+
 ## Contact
 
 Please feel free to report issues and any related problems to Chuanguang Yang (yangchuanguang@ict.ac.cn).
