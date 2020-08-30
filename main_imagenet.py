@@ -44,6 +44,9 @@ parser.add_argument('--print_freq', type=int, default=100)
 # global hyperparameter set
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+
+if not os.path.isdir('result'):
+    os.mkdir('result')
 if args.resume is False:
     with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
         f.seek(0)

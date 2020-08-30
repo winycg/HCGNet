@@ -37,6 +37,8 @@ parser.add_argument('--evaluate', '-e', action='store_true', help='evaluate mode
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
+if not os.path.isdir('result'):
+    os.mkdir('result')
 if args.resume is False:
     with open('result/' + str(os.path.basename(__file__).split('.')[0]) + args.arch + '.txt', 'a+') as f:
         f.seek(0)
