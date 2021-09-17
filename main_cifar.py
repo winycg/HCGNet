@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-
+import shutil
 
 import os
 import argparse
@@ -22,16 +22,17 @@ from regularization.dropblock import LinearScheduler, SGDRScheduler
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
 parser.add_argument('--data', default='data', type=str, help='Dataset directory')
 parser.add_argument('--dataset', default='cifar10', type=str, help='Dataset name')
-parser.add_argument('--arch', default='HCGNet_A3', type=str, help='network architecture')
-parser.add_argument('--init-lr', default=0.1, type=float, help='learning rate')
+parser.add_argument('--arch', default='HCGNet_A1', type=str, help='network architecture')
 parser.add_argument('--lr-type', default='SGDR', type=str, help='learning rate strategy')
-parser.add_argument('--milestones', default=[150, 225], type=list, help='milestones for lr-multistep')
-parser.add_argument('--sgdr-t', default=10, type=int, dest='sgdr_t',help='SGDR T_0')
-parser.add_argument('--epochs', type=int, default=1270, help='number of epochs to train')
-parser.add_argument('--gpu-id', type=str, default='0, 1')
+parser.add_argument('--gpu-id', type=str, default='0')
 parser.add_argument('--manual_seed', type=int, default=0)
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--evaluate', '-e', action='store_true', help='evaluate model')
+
+parser.add_argument('--init-lr', default=0.1, type=float, help='learning rate')
+parser.add_argument('--milestones', default=[150, 225], type=list, help='milestones for lr-multistep')
+parser.add_argument('--sgdr-t', default=10, type=int, dest='sgdr_t',help='SGDR T_0')
+parser.add_argument('--epochs', type=int, default=1270, help='number of epochs to train')
 
 # global hyperparameter set
 args = parser.parse_args()
@@ -178,6 +179,7 @@ def train(epoch):
     drop_scheduler.global_epoch = epoch
     start_time = time.time()
     for batch_idx, (inputs, targets) in enumerate(trainloader):
+        iter_start_time = time.time()
         inputs, targets = inputs.to(device), targets.to(device)
         inputs, targets_a, targets_b, lam = mixup_data(inputs, targets, 1.)
 
@@ -191,8 +193,14 @@ def train(epoch):
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
+
+
+        print('Epoch:{}\t batch_idx:{}/All_batch:{}\t lr:{:.3f}\t duration:{:.3f}\ttrain_acc:{:.2f}'
+          .format(epoch, batch_idx, len(trainloader), lr, time.time()-iter_start_time, 100. * correct/total))
+        iter_start_time = time.time()
     print('Epoch:{0}\t lr:{1:.3f}\t duration:{2:.3f}\ttrain_acc:{3:.2f}\ttrain_loss:{4:.6f}'
           .format(epoch, lr, time.time()-start_time, 100. * correct/total, train_loss/len(trainset)))
+    
     with open('result/' + str(os.path.basename(__file__).split('.')[0]) + args.arch + '.txt', 'a+') as f:
         f.write('Epoch:{0}\t lr:{1:.3f}\t duration:{2:.3f}\ttrain_acc:{3:.2f}\ttrain_loss:{4:.6f}'
           .format(epoch, lr, time.time()-start_time, 100. * correct/total, train_loss/len(trainset)))
@@ -215,9 +223,12 @@ def test(epoch):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
+            print('Epoch:{}\t batch_idx:{}/All_batch:{}\ttest_acc:{:.2f}'
+            .format(epoch, batch_idx, len(testloader), 100. * correct/total))
+
         with open('result/' + str(os.path.basename(__file__).split('.')[0]) + args.arch + '.txt', 'a+') as f:
             f.write('\t test_acc:{0:.2f}\t test_loss:{1:.6f}'
-                    .format(train_loss / len(trainset), 100. * correct / total)+'\n')
+                    .format(test_loss / len(testset), 100. * correct / total)+'\n')
 
     # Save checkpoint.
     acc = 100. * correct/total
