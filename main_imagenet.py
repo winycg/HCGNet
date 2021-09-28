@@ -47,6 +47,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 if not os.path.isdir('result'):
     os.mkdir('result')
+if not os.path.isdir('checkpoint'):
+    os.mkdir('checkpoint')
 if args.resume is False:
     with open('result/'+ os.path.basename(__file__).split('.')[0] +'.txt', 'a+') as f:
         f.seek(0)
@@ -244,12 +246,11 @@ def accuracy(output, target, topk=(1,)):
     batch_size = target.size(0)
 
     _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+    correct = pred.eq(target.view(-1, 1).expand_as(pred))
 
     res = []
     for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        correct_k = correct[:, :k].float().sum()
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
